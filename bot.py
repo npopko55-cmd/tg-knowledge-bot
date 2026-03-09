@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -59,6 +60,27 @@ def run_health_server():
     server.serve_forever()
 
 
+def ask_ai(user_message, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct:free",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+            if response.choices and response.choices[0].message.content:
+                return response.choices[0].message.content
+            else:
+                logger.error(f"Пустой ответ (попытка {attempt + 1})")
+        except Exception as e:
+            logger.error(f"Попытка {attempt + 1}/{max_retries}: {type(e).__name__}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5)
+    return "Не удалось получить ответ после нескольких попыток. Попробуй позже."
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Отправь мне вопрос, и я отвечу на основе базы знаний."
@@ -68,24 +90,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Вопрос: {user_message}")
-
-    try:
-        response = client.chat.completions.create(
-            model="meta-llama/llama-3.3-70b-instruct:free",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-        )
-        if response.choices and response.choices[0].message.content:
-            answer = response.choices[0].message.content
-        else:
-            logger.error(f"Пустой ответ: {response}")
-            answer = "Модель вернула пустой ответ. Попробуй ещё раз."
-    except Exception as e:
-        logger.error(f"Ошибка API: {type(e).__name__}: {e}")
-        answer = f"Ошибка: {type(e).__name__}: {e}"
-
+    answer = ask_ai(user_message)
     await update.message.reply_text(answer)
 
 
