@@ -77,7 +77,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 {"role": "user", "content": user_message},
             ],
         )
-        answer = response.choices[0].message.content
+        if response.choices and response.choices[0].message.content:
+            answer = response.choices[0].message.content
+        else:
+            logger.error(f"Пустой ответ: {response}")
+            answer = "Модель вернула пустой ответ. Попробуй ещё раз."
     except Exception as e:
         logger.error(f"Ошибка API: {type(e).__name__}: {e}")
         answer = f"Ошибка: {type(e).__name__}: {e}"
