@@ -12,6 +12,14 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 PORT = int(os.environ.get("PORT", 10000))
 
+# Список бесплатных моделей (если одна не работает — берём следующую)
+FREE_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-235b-a22b:free",
+    "google/gemma-3-27b-it:free",
+    "mistralai/mistral-small-3.1-24b-instruct:free",
+]
+
 # Загрузка базы знаний
 def load_knowledge():
     knowledge_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge.txt")
@@ -60,25 +68,24 @@ def run_health_server():
     server.serve_forever()
 
 
-def ask_ai(user_message, max_retries=3):
-    for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct:free",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message},
-                ],
-            )
-            if response.choices and response.choices[0].message.content:
-                return response.choices[0].message.content
-            else:
-                logger.error(f"Пустой ответ (попытка {attempt + 1})")
-        except Exception as e:
-            logger.error(f"Попытка {attempt + 1}/{max_retries}: {type(e).__name__}: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(5)
-    return "Не удалось получить ответ после нескольких попыток. Попробуй позже."
+def ask_ai(user_message):
+    for model in FREE_MODELS:
+        for attempt in range(2):
+            try:
+                logger.info(f"Пробую модель: {model} (попытка {attempt + 1})")
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_message},
+                    ],
+                )
+                if response.choices and response.choices[0].message.content:
+                    return response.choices[0].message.content
+            except Exception as e:
+                logger.error(f"{model}: {type(e).__name__}: {e}")
+                time.sleep(3)
+    return "Все модели сейчас перегружены. Попробуй через пару минут."
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
