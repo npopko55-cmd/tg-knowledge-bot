@@ -1,7 +1,6 @@
 import os
 import logging
 import threading
-import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -9,16 +8,8 @@ from openai import OpenAI
 
 # Настройки
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PORT = int(os.environ.get("PORT", 10000))
-
-# Список бесплатных моделей (если одна не работает — берём следующую)
-FREE_MODELS = [
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "qwen/qwen3-235b-a22b:free",
-    "google/gemma-3-27b-it:free",
-    "mistralai/mistral-small-3.1-24b-instruct:free",
-]
 
 # Загрузка базы знаний
 def load_knowledge():
@@ -31,10 +22,10 @@ def load_knowledge():
 
 KNOWLEDGE = load_knowledge()
 
-# Настройка OpenRouter
+# Настройка Gemini через OpenAI-совместимый API
 client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+    api_key=GEMINI_API_KEY,
 )
 
 SYSTEM_PROMPT = f"""Ты — помощник, который отвечает на вопросы СТРОГО на основе базы знаний ниже.
@@ -68,26 +59,6 @@ def run_health_server():
     server.serve_forever()
 
 
-def ask_ai(user_message):
-    for model in FREE_MODELS:
-        for attempt in range(2):
-            try:
-                logger.info(f"Пробую модель: {model} (попытка {attempt + 1})")
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": user_message},
-                    ],
-                )
-                if response.choices and response.choices[0].message.content:
-                    return response.choices[0].message.content
-            except Exception as e:
-                logger.error(f"{model}: {type(e).__name__}: {e}")
-                time.sleep(3)
-    return "Все модели сейчас перегружены. Попробуй через пару минут."
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Отправь мне вопрос, и я отвечу на основе базы знаний."
@@ -97,7 +68,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Вопрос: {user_message}")
-    answer = ask_ai(user_message)
+
+    try:
+        response = client.chat.completions.create(
+            model="gemini-2.0-flash",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        if response.choices and response.choices[0].message.content:
+            answer = response.choices[0].message.content
+        else:
+            answer = "Пустой ответ. Попробуй ещё раз."
+    except Exception as e:
+        logger.error(f"Ошибка API: {type(e).__name__}: {e}")
+        answer = f"Ошибка: {type(e).__name__}: {e}"
+
     await update.message.reply_text(answer)
 
 
