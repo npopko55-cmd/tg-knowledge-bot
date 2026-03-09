@@ -80,6 +80,75 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         answer = response.choices[0].message.content
     except Exception as e:
+        logger.error(f"Ошибка API: {type(e).__name__}: {e}")
+        answer = f"Ошибка: {type(e).__name__}: {e}"
+
+    await update.message.reply_text(answer)
+
+
+def main():
+    # Запуск веб-сервера в отдельном потоке
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    logger.info(f"Health server запущен на порту {PORT}")
+
+    # Запуск бота
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    logger.info("Бот запущен")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
+- Пиши на русском языке
+
+БАЗА ЗНАНИЙ:
+{KNOWLEDGE}
+"""
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+# Простой веб-сервер для health check (чтобы Render не выключал)
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format, *args):
+        pass  # тихий лог
+
+
+def run_health_server():
+    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
+    server.serve_forever()
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Привет! Отправь мне вопрос, и я отвечу на основе базы знаний."
+    )
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_message = update.message.text
+    logger.info(f"Вопрос: {user_message}")
+
+    try:
+        response = client.chat.completions.create(
+            model="google/gemini-2.0-flash-exp:free",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        answer = response.choices[0].message.content
+    except Exception as e:
         logger.error(f"Ошибка API: {e}")
         answer = "Произошла ошибка при обработке запроса. Попробуй позже."
 
