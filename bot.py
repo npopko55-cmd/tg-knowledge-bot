@@ -11,13 +11,6 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PORT = int(os.environ.get("PORT", 10000))
 
-# Список моделей Gemini (пробуем по очереди)
-GEMINI_MODELS = [
-    "gemini-2.5-flash-preview-05-20",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-]
-
 # Загрузка базы знаний
 def load_knowledge():
     knowledge_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge.txt")
@@ -66,25 +59,6 @@ def run_health_server():
     server.serve_forever()
 
 
-def ask_ai(user_message):
-    for model in GEMINI_MODELS:
-        try:
-            logger.info(f"Пробую: {model}")
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message},
-                ],
-            )
-            if response.choices and response.choices[0].message.content:
-                logger.info(f"Ответ от: {model}")
-                return response.choices[0].message.content
-        except Exception as e:
-            logger.error(f"{model}: {type(e).__name__}: {e}")
-    return "Все модели недоступны. Попробуй через минуту."
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Отправь мне вопрос, и я отвечу на основе базы знаний."
@@ -94,7 +68,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Вопрос: {user_message}")
-    answer = ask_ai(user_message)
+
+    try:
+        response = client.chat.completions.create(
+            model="gemini-2.0-flash",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        if response.choices and response.choices[0].message.content:
+            answer = response.choices[0].message.content
+        else:
+            answer = "Пустой ответ. Попробуй ещё раз."
+    except Exception as e:
+        logger.error(f"Ошибка API: {type(e).__name__}: {e}")
+        answer = f"Ошибка: {type(e).__name__}: {e}"
+
     await update.message.reply_text(answer)
 
 
