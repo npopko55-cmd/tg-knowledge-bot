@@ -8,7 +8,7 @@ from openai import OpenAI
 
 # Настройки
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 PORT = int(os.environ.get("PORT", 10000))
 
 # Загрузка базы знаний
@@ -22,10 +22,10 @@ def load_knowledge():
 
 KNOWLEDGE = load_knowledge()
 
-# Настройка Gemini
+# Настройка API через routerai.ru
 client = OpenAI(
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-    api_key=GEMINI_API_KEY,
+    base_url="https://routerai.ru/api/v1",
+    api_key=OPENROUTER_API_KEY,
 )
 
 SYSTEM_PROMPT = f"""Ты — помощник, который отвечает на вопросы СТРОГО на основе базы знаний ниже.
@@ -71,7 +71,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = client.chat.completions.create(
-            model="gemini-2.0-flash",
+            model="google/gemini-2.0-flash-001",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
